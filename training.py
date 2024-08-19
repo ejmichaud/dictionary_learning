@@ -8,6 +8,7 @@ import os
 from tqdm import tqdm
 from .trainers.standard import StandardTrainer
 import wandb
+from structured_sae.utils import LocalLogger
 import json
 # from .evaluation import evaluate
 
@@ -51,7 +52,6 @@ def trainSAE(
             )
         )
 
-
     if log_steps is not None:
         if use_wandb:
             wandb.init(
@@ -66,6 +66,7 @@ def trainSAE(
     # make save dirs, export config
     if save_dir is not None:
         save_dirs = [os.path.join(save_dir, f"trainer_{i}") for i in range(len(trainer_configs))]
+        local_loggers = []
         for trainer, dir in zip(trainers, save_dirs):
             os.makedirs(dir, exist_ok=True)
             # save config
@@ -75,6 +76,7 @@ def trainSAE(
             except: pass
             with open(os.path.join(dir, "config.json"), 'w') as f:
                 json.dump(config, f, indent=4)
+            local_loggers.append(LocalLogger(dir))
     else:
         save_dirs = [None for _ in trainer_configs]
     
@@ -134,6 +136,16 @@ def trainSAE(
                     # log.update(
                     #     {f'trainer{i}/{k}' : v for k, v in metrics.items()}
                     # )
+
+                    if save_dir is not None:
+                        trainer_log = {}
+                        for k, v in log.items():
+                            if k.startswith(f'{trainer_name}/'):
+                                # get name after trainer_name
+                                metric_name = k[len(f'{trainer_name}/'):]
+                                trainer_log[metric_name] = v
+                        local_loggers[i].log(trainer_log, step=step)
+
             if use_wandb:
                 wandb.log(log, step=step)
 
